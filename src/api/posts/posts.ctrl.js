@@ -5,13 +5,34 @@ import Joi from 'joi';
 
 const { ObjectId } = mongoose.Types;
 
-export const checkObjectId = (ctx, next) => {
+export const getPostById = async (ctx, next) => {
   const { id } = ctx.params;
 
   if (!ObjectId.isValid(id)) {
     ctx.status = 400;
     return;
   }
+
+  try {
+    const post = await Post.findById(id);
+    if (!post) {
+      ctx.status = 404;
+      return;
+    }
+    ctx.state.post = post;
+    return next();
+  } catch (e) {
+    ctx.throw(500, e);
+  }
+};
+
+export const checkOwnPost = (ctx, next) => {
+  const { user, post } = ctx.state;
+  if (post.user._id.toString() !== user._id) {
+    ctx.status = 403;
+    return;
+  }
+
   return next();
 };
 
@@ -20,7 +41,7 @@ export const write = async ctx => {
     // 객체가 다음 필드를 가지고 있음을 검증
     title: Joi.string().required(), // required()가 있으면 필수항목
     body: Joi.string().required(),
-    tags: Joi.array().items(Joi.string).required(), // 문자열 배열
+    tags: Joi.array().items(Joi.string()).required(), // 문자열 배열
   });
 
   const result = schema.validate(ctx.request.body);
@@ -36,6 +57,7 @@ export const write = async ctx => {
     title,
     body,
     tags,
+    user: ctx.state.user,
   });
 
   try {
@@ -45,6 +67,8 @@ export const write = async ctx => {
     ctx.throw(500, e);
   }
 };
+
+// GET /api/posts?username=&tag=&page=
 
 export const list = async ctx => {
   // query는 문자열 이므로 숫자로 변환
@@ -56,6 +80,13 @@ export const list = async ctx => {
     ctx.status = 400;
     return;
   }
+
+  const { tag, username } = ctx.query;
+  // tag, username 값이 유효하면 객체 안에 넣고, 그렇지 않으면 넣지 않음
+  const query = {
+    ...(username ? { 'user.username': username } : {}),
+    ...(tag ? { tags: tag } : {}),
+  };
 
   try {
     // const posts = await Post.find()
@@ -75,14 +106,14 @@ export const list = async ctx => {
     //   }));
 
     // exec()하기전에 lean()해서 처음부터 JSON형태로 조회
-    const posts = await Post.find()
+    const posts = await Post.find(query)
       .sort({ _id: -1 })
       .limit(10)
       .skip((page - 1) * 10)
       .lean()
       .exec();
 
-    const postCount = await Post.countDocuments().exec();
+    const postCount = await Post.countDocuments(query).exec();
     ctx.set('Last-Page', Math.ceil(postCount / 10));
     ctx.body = posts.map(post => ({
       ...post,
@@ -95,18 +126,7 @@ export const list = async ctx => {
 };
 
 export const read = async ctx => {
-  const { id } = ctx.params;
-
-  try {
-    const post = await Post.findById(id).exec();
-    if (!post) {
-      ctx.status = 404; //not found
-      return;
-    }
-    ctx.body = post;
-  } catch (e) {
-    ctx.throw(500, e);
-  }
+  ctx.body = ctx.state.post;
 };
 
 export const remove = async ctx => {

@@ -102,5 +102,5 @@ export const check = async ctx => {
 // POST /api/auth/logout
 export const logout = async ctx => {
   ctx.cookies.set('access_token');
-  ctx.state = 204; // no content
+  ctx.status = 204; // no content
 };

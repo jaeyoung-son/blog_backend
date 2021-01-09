@@ -191,8 +191,8 @@ export const update = async ctx => {
 
   const nextData = { ...ctx.request.body };
 
-  if (nextsData.body) {
-    nextsData.body = sanitizelHtml(nextData.body);
+  if (nextData.body) {
+    nextData.body = sanitizelHtml(nextData.body);
   }
 
   try {
